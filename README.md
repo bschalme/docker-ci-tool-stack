@@ -120,6 +120,11 @@ cd docker-ci-tool-stack
 
 # Getting started
 
+This branch uses nginx as a reverse proxy into the containers. Each container has a virtual host setting that ends with __mydomain.com__. So for
+example, the sonar container has sonar.mydomain.com. Change this to your domain by running __docker-compose.yml.domain.sh__ and specify your
+base domain name as the argument. So __docker-compose.yml.domain.sh demo.megacorp.com__ will set the SonarQube virtual host to __sonar.demo.megacorp.com__.
+Same with jenkins, git, and nexus.
+
 To get all docker containers up and running, in __docker-ci-tool-stack__ use:
 
 ```
