@@ -1,108 +1,116 @@
-version: '2'
+version: '3'
 
 networks:
   prodnetwork:
     driver: bridge
 
+volumes:
+  nexus-data:
+  jenkins-data:
+
 services:
- nginx:
-  image: nginx
-  container_name: nginx
-  ports:
-    - "80:80"
-    - "443:443"
-  networks:
-    - prodnetwork
-  volumes:
-    - /etc/nginx/conf.d
-    - /etc/nginx/vhost.d
-    - /usr/share/nginx/html
-    - ./certs:/etc/nginx/certs:ro
+  nginx:
+    image: nginx
+    container_name: nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    networks:
+      - prodnetwork
+    volumes:
+      - /etc/nginx/conf.d
+      - /etc/nginx/vhost.d
+      - /usr/share/nginx/html
+      - ./certs:/etc/nginx/certs:ro
 
- nginx-gen:
-  image: jwilder/docker-gen
-  container_name: nginx-gen
-  networks:
-    - prodnetwork
-  volumes:
-    - /var/run/docker.sock:/tmp/docker.sock:ro
-    - ./nginx.tmpl:/etc/docker-gen/templates/nginx.tmpl:ro
-  volumes_from:
-    - nginx
-  command: -notify-sighup nginx -watch /etc/docker-gen/templates/nginx.tmpl /etc/nginx/conf.d/default.conf
+  nginx-gen:
+    image: jwilder/docker-gen
+    container_name: nginx-gen
+    networks:
+      - prodnetwork
+    volumes:
+      - /var/run/docker.sock:/tmp/docker.sock:ro
+      - ./nginx.tmpl:/etc/docker-gen/templates/nginx.tmpl:ro
+    volumes_from:
+      - nginx
+    command: -notify-sighup nginx -watch /etc/docker-gen/templates/nginx.tmpl /etc/nginx/conf.d/default.conf
 
- nexus:
-  build: ./nexus
-  ports:
-    - "18081:8081"
-  networks:
-    - prodnetwork
-  environment:
-    - VIRTUAL_HOST=nexus.mydomain.com
-    - VIRTUAL_PORT=8081
+  nexus:
+    build: ./docker-nexus3
+    restart: always
+    ports:
+      - "18081:8081"
+    networks:
+      - prodnetwork
+    environment:
+      - VIRTUAL_HOST=nexus.mydomain.com
+      - VIRTUAL_PORT=8081
+    volumes:
+      - nexus-data:/nexus-data
+  jenkins:
+    build: ./jenkins
+    restart: always
+    ports:
+      - "18080:8080"
+    networks:
+      - prodnetwork
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /usr/bin/docker:/usr/bin/docker
+      - jenkins-data:/var/lib/jenkins/
+    depends_on:
+      - nexus
+      - sonar
+    environment:
+      - NEXUS_PORT=8081
+      - SONAR_PORT=9000
+      - SONAR_DB_PORT=5432
+      - VIRTUAL_HOST=jenkins.mydomain.com
+      - VIRTUAL_PORT=8080
+  sonardb:
+    networks:
+      - prodnetwork
+    restart: always
+    image: postgres:9.6
+    ports:
+      - "5432:5432"
+    environment:
+     - POSTGRES_USER=sonar
+     - POSTGRES_PASSWORD=sonar
+  sonar:
+    image: sonarqube
+    restart: always
+    ports:
+     - "19000:9000"
+     - "19092:9092"
+    networks:
+      - prodnetwork
+    depends_on:
+      - sonardb
+    environment:
+     - SONARQUBE_JDBC_URL=jdbc:postgresql://sonardb:5432/sonar
+     - SONARQUBE_JDBC_USERNAME=sonar
+     - SONARQUBE_JDBC_PASSWORD=sonar
+     - VIRTUAL_HOST=sonar.mydomain.com
+     - VIRTUAL_PORT=9000
 
- jenkins:
-  build: ./jenkins
-  ports:
-    - "18080:8080"
-  networks:
-    - prodnetwork
-  volumes:
-    - /var/run/docker.sock:/var/run/docker.sock
-    - /usr/bin/docker:/usr/bin/docker
-    - /opt/jenkins/:/var/lib/jenkins/
-  depends_on:
-    - nexus
-    - gitlab
-    - sonar
-  environment:
-    - NEXUS_PORT=8081
-    - SONAR_PORT=9000
-    - SONAR_DB_PORT=5432
-    - VIRTUAL_HOST=jenkins.mydomain.com
-    - VIRTUAL_PORT=8080
-
- sonar:
-  build: ./sonar
-  ports:
-   - "19000:9000"
-   - "5432:5432"
-  networks:
-    - prodnetwork
-  depends_on:
-    - sonardb
-  environment:
-   - SONARQUBE_JDBC_URL=jdbc:postgresql://sonardb:5432/sonar
-   - SONARQUBE_JDBC_USERNAME=sonar
-   - SONARQUBE_JDBC_PASSWORD=sonar
-   - VIRTUAL_HOST=sonar.mydomain.com
-   - VIRTUAL_PORT=9000
- sonardb:
-  networks:
-    - prodnetwork
-  image: postgres
-  environment:
-   - POSTGRES_USER=sonar
-   - POSTGRES_PASSWORD=sonar
-  volumes:
-    - /opt/postgres/data:/var/lib/postgresql/data
-
- gitlab:
-  image: gitlab/gitlab-ce:8.14.4-ce.0
-  restart: always
-  networks:
-    - prodnetwork
-  environment:
-    # GITLAB_OMNIBUS_CONFIG: |
-      # external_url 'https://gitlab.example.com'
-      # Add any other gitlab.rb configuration here, each on its own line
-    - VIRTUAL_HOST=git.mydomain.com
-    - VIRTUAL_PORT=80
-  ports:
-    - "2080:80"
-    - "2443:443"
-    - "2222:22"
-  volumes:
-    - /opt/gitlab/config:/etc/gitlab
-    - /opt/gitlab/logs:/var/log/gitlab
-    - /opt/gitlab/data:/var/opt/gitlab
+##########################################################################################
+# DISABLED: GitLab takes too much memory and CPU. Demo uses GitHub repositories instead.
+#
+#  gitlab:
+#    image: gitlab/gitlab-ce:latest
+#    restart: always
+#    networks:
+#      - prodnetwork
+#    environment:
+#      GITLAB_OMNIBUS_CONFIG: |
+#        # external_url 'https://gitlab.example.com'
+#        # Add any other gitlab.rb configuration here, each on its own line
+#    ports:
+#      - "10080:80"
+#      - "10443:443"
+#      - "10022:22"
+#    volumes:
+#      - /opt/gitlab/config:/etc/gitlab
+#      - /opt/gitlab/logs:/var/log/gitlab
+#      - /opt/gitlab/data:/var/opt/gitlab
