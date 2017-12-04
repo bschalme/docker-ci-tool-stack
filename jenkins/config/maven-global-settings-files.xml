@@ -13,7 +13,7 @@
          &lt;!--This sends everything else to /public --&gt;
          &lt;id&gt;nexus&lt;/id&gt;
          &lt;mirrorOf&gt;*&lt;/mirrorOf&gt;
-         &lt;url&gt;http://nexus:8081/repository/maven-public&lt;/url&gt;
+         &lt;url&gt;http://nexus:8081/content/repositories/central&lt;/url&gt;
       &lt;/mirror&gt;
    &lt;/mirrors&gt;
    &lt;servers&gt;
